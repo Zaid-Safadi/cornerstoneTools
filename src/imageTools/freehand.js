@@ -277,6 +277,9 @@ function addPoint (eventData) {
   // Increment the current handle value
   config.currentHandle += 1;
 
+
+  fireModeified(eventData.element, data);
+
   // Force onImageRendered to fire
   external.cornerstone.updateImage(eventData.element);
 }
@@ -317,6 +320,8 @@ function endDrawing (eventData, handleNearby) {
   config.currentTool = -1;
   config.activePencilMode = false;
   data.canComplete = false;
+
+  fireModeified(eventData.element, data);
 
   external.cornerstone.updateImage(eventData.element);
 }
@@ -1140,6 +1145,22 @@ function closeToolIfDrawing(element) {
 */
 function getConfiguration () {
   return configuration;
+}
+
+/**
+ * Fire cornerstonetoolsmeasurementmodified event on provided element
+ * @param {any} element which freehand data has been modified
+ * @param {any} data the measurment data
+ */
+function fireModeified (element, data) {
+  const eventType = EVENTS.MEASUREMENT_MODIFIED;
+  const modifiedEventData = {
+    toolType,
+    element,
+    measurementData: data
+  };
+
+  triggerEvent(element, eventType, modifiedEventData);
 }
 
 /**
