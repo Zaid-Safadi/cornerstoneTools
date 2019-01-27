@@ -73,7 +73,7 @@ return /******/ (function(modules) { // webpackBootstrap
 /******/ 	}
 /******/
 /******/ 	var hotApplyOnUpdate = true;
-/******/ 	var hotCurrentHash = "041d706ce3fd7b5ca2c6"; // eslint-disable-line no-unused-vars
+/******/ 	var hotCurrentHash = "f7e7b96a3b1307f08136"; // eslint-disable-line no-unused-vars
 /******/ 	var hotRequestTimeout = 10000;
 /******/ 	var hotCurrentModuleData = {};
 /******/ 	var hotCurrentChildModule; // eslint-disable-line no-unused-vars
@@ -3238,10 +3238,10 @@ function addPoint(eventData) {
   // Increment the current handle value
   config.currentHandle += 1;
 
-  fireModeified(eventData.element, data);
-
   // Force onImageRendered to fire
   _externalModules2.default.cornerstone.updateImage(eventData.element);
+
+  fireModified(eventData.element, data);
 }
 
 /**
@@ -3281,9 +3281,18 @@ function endDrawing(eventData, handleNearby) {
   config.activePencilMode = false;
   data.canComplete = false;
 
-  fireModeified(eventData.element, data);
+  var seriesModule = _externalModules2.default.cornerstone.metaData.get('generalSeriesModule', eventData.image.imageId);
+  var modality = void 0;
+
+  if (seriesModule) {
+    modality = seriesModule.modality;
+  }
+
+  calculateStatistics(data, eventData.element, eventData.image, modality);
 
   _externalModules2.default.cornerstone.updateImage(eventData.element);
+
+  fireModified(eventData.element, data);
 }
 
 /**
@@ -3820,93 +3829,7 @@ function onImageRendered(e) {
       }
 
       // Define variables for the area and mean/standard deviation
-      var area = void 0,
-          meanStdDev = void 0,
-          meanStdDevSUV = void 0;
-
-      // Perform a check to see if the tool has been invalidated. This is to prevent
-      // Unnecessary re-calculation of the area, mean, and standard deviation if the
-      // Image is re-rendered but the tool has not moved (e.g. during a zoom)
-      if (data.invalidated === false) {
-        // If the data is not invalidated, retrieve it from the toolData
-        meanStdDev = data.meanStdDev;
-        meanStdDevSUV = data.meanStdDevSUV;
-        area = data.area;
-      } else if (!data.active) {
-        // If the data has been invalidated, and the tool is not currently active,
-        // We need to calculate it again.
-
-        // Retrieve the bounds of the ROI in image coordinates
-        var bounds = {
-          left: data.handles[0].x,
-          right: data.handles[0].x,
-          bottom: data.handles[0].y,
-          top: data.handles[0].x
-        };
-
-        for (var _i = 0; _i < data.handles.length; _i++) {
-          bounds.left = Math.min(bounds.left, data.handles[_i].x);
-          bounds.right = Math.max(bounds.right, data.handles[_i].x);
-          bounds.bottom = Math.min(bounds.bottom, data.handles[_i].y);
-          bounds.top = Math.max(bounds.top, data.handles[_i].y);
-        }
-
-        var polyBoundingBox = {
-          left: bounds.left,
-          top: bounds.bottom,
-          width: Math.abs(bounds.right - bounds.left),
-          height: Math.abs(bounds.top - bounds.bottom)
-        };
-
-        // Store the bounding box information for the text box
-        data.polyBoundingBox = polyBoundingBox;
-
-        // First, make sure this is not a color image, since no mean / standard
-        // Deviation will be calculated for color images.
-        if (!image.color) {
-          // Retrieve the array of pixels that the ROI bounds cover
-          var pixels = cornerstone.getPixels(element, polyBoundingBox.left, polyBoundingBox.top, polyBoundingBox.width, polyBoundingBox.height);
-
-          // Calculate the mean & standard deviation from the pixels and the object shape
-          meanStdDev = (0, _calculateFreehandStatistics2.default)(pixels, polyBoundingBox, data.handles);
-
-          if (modality === 'PT') {
-            // If the image is from a PET scan, use the DICOM tags to
-            // Calculate the SUV from the mean and standard deviation.
-
-            // Note that because we are using modality pixel values from getPixels, and
-            // The calculateSUV routine also rescales to modality pixel values, we are first
-            // Returning the values to storedPixel values before calcuating SUV with them.
-            // TODO: Clean this up? Should we add an option to not scale in calculateSUV?
-            meanStdDevSUV = {
-              mean: (0, _calculateSUV2.default)(image, (meanStdDev.mean - image.intercept) / image.slope),
-              stdDev: (0, _calculateSUV2.default)(image, (meanStdDev.stdDev - image.intercept) / image.slope)
-            };
-          }
-
-          // If the mean and standard deviation values are sane, store them for later retrieval
-          if (meanStdDev && !isNaN(meanStdDev.mean)) {
-            data.meanStdDev = meanStdDev;
-            data.meanStdDevSUV = meanStdDevSUV;
-          }
-        }
-
-        // Retrieve the pixel spacing values, and if they are not
-        // Real non-zero values, set them to 1
-        var columnPixelSpacing = image.columnPixelSpacing || 1;
-        var rowPixelSpacing = image.rowPixelSpacing || 1;
-        var scaling = columnPixelSpacing * rowPixelSpacing;
-
-        area = (0, _freeHandArea2.default)(data.handles, scaling);
-
-        // If the area value is sane, store it for later retrieval
-        if (!isNaN(area)) {
-          data.area = area;
-        }
-
-        // Set the invalidated flag to false so that this data won't automatically be recalculated
-        data.invalidated = false;
-      }
+      calculateStatistics(data, element, image, modality);
 
       // Only render text if polygon ROI has been completed and freehand 'shiftKey' mode was not used:
       if (data.polyBoundingBox && !data.textBox.freehand) {
@@ -3990,6 +3913,99 @@ function onImageRendered(e) {
 
   function textBoxAnchorPoints(handles) {
     return handles;
+  }
+}
+
+function calculateStatistics(data, element, image, modality) {
+  var cornerstone = _externalModules2.default.cornerstone;
+
+  // Define variables for the area and mean/standard deviation
+  var area = void 0,
+      meanStdDev = void 0,
+      meanStdDevSUV = void 0;
+
+  // Perform a check to see if the tool has been invalidated. This is to prevent
+  // Unnecessary re-calculation of the area, mean, and standard deviation if the
+  // Image is re-rendered but the tool has not moved (e.g. during a zoom)
+  if (data.invalidated === false) {
+    // If the data is not invalidated, retrieve it from the toolData
+    meanStdDev = data.meanStdDev;
+    meanStdDevSUV = data.meanStdDevSUV;
+    area = data.area;
+  } else if (!data.active) {
+    // If the data has been invalidated, and the tool is not currently active,
+    // We need to calculate it again.
+
+    // Retrieve the bounds of the ROI in image coordinates
+    var bounds = {
+      left: data.handles[0].x,
+      right: data.handles[0].x,
+      bottom: data.handles[0].y,
+      top: data.handles[0].x
+    };
+
+    for (var i = 0; i < data.handles.length; i++) {
+      bounds.left = Math.min(bounds.left, data.handles[i].x);
+      bounds.right = Math.max(bounds.right, data.handles[i].x);
+      bounds.bottom = Math.min(bounds.bottom, data.handles[i].y);
+      bounds.top = Math.max(bounds.top, data.handles[i].y);
+    }
+
+    var polyBoundingBox = {
+      left: bounds.left,
+      top: bounds.bottom,
+      width: Math.abs(bounds.right - bounds.left),
+      height: Math.abs(bounds.top - bounds.bottom)
+    };
+
+    // Store the bounding box information for the text box
+    data.polyBoundingBox = polyBoundingBox;
+
+    // First, make sure this is not a color image, since no mean / standard
+    // Deviation will be calculated for color images.
+    if (!image.color) {
+      // Retrieve the array of pixels that the ROI bounds cover
+      var pixels = cornerstone.getPixels(element, polyBoundingBox.left, polyBoundingBox.top, polyBoundingBox.width, polyBoundingBox.height);
+
+      // Calculate the mean & standard deviation from the pixels and the object shape
+      meanStdDev = (0, _calculateFreehandStatistics2.default)(pixels, polyBoundingBox, data.handles);
+
+      if (modality === 'PT') {
+        // If the image is from a PET scan, use the DICOM tags to
+        // Calculate the SUV from the mean and standard deviation.
+
+        // Note that because we are using modality pixel values from getPixels, and
+        // The calculateSUV routine also rescales to modality pixel values, we are first
+        // Returning the values to storedPixel values before calcuating SUV with them.
+        // TODO: Clean this up? Should we add an option to not scale in calculateSUV?
+        meanStdDevSUV = {
+          mean: (0, _calculateSUV2.default)(image, (meanStdDev.mean - image.intercept) / image.slope),
+          stdDev: (0, _calculateSUV2.default)(image, (meanStdDev.stdDev - image.intercept) / image.slope)
+        };
+      }
+
+      // If the mean and standard deviation values are sane, store them for later retrieval
+      if (meanStdDev && !isNaN(meanStdDev.mean)) {
+        data.meanStdDev = meanStdDev;
+        data.meanStdDevSUV = meanStdDevSUV;
+      }
+    }
+
+    // Retrieve the pixel spacing values, and if they are not
+    // Real non-zero values, set them to 1
+    var columnPixelSpacing = image.columnPixelSpacing || 1;
+    var rowPixelSpacing = image.rowPixelSpacing || 1;
+    var scaling = columnPixelSpacing * rowPixelSpacing;
+
+    area = (0, _freeHandArea2.default)(data.handles, scaling);
+
+    // If the area value is sane, store it for later retrieval
+    if (!isNaN(area)) {
+      data.area = area;
+    }
+
+    // Set the invalidated flag to false so that this data won't automatically be recalculated
+    data.invalidated = false;
   }
 }
 
@@ -4117,7 +4133,7 @@ function getConfiguration() {
  * @param {any} element which freehand data has been modified
  * @param {any} data the measurment data
  */
-function fireModeified(element, data) {
+function fireModified(element, data) {
   var eventType = _events2.default.MEASUREMENT_MODIFIED;
   var modifiedEventData = {
     toolType: toolType,
