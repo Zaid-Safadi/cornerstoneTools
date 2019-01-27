@@ -1,4 +1,4 @@
-/*! cornerstone-tools - 2.4.0 - 2019-01-22 | (c) 2017 Chris Hafey | https://github.com/cornerstonejs/cornerstoneTools */
+/*! cornerstone-tools - 2.4.0 - 2019-01-27 | (c) 2017 Chris Hafey | https://github.com/cornerstonejs/cornerstoneTools */
 (function webpackUniversalModuleDefinition(root, factory) {
 	if(typeof exports === 'object' && typeof module === 'object')
 		module.exports = factory();
@@ -73,7 +73,7 @@ return /******/ (function(modules) { // webpackBootstrap
 /******/ 	}
 /******/
 /******/ 	var hotApplyOnUpdate = true;
-/******/ 	var hotCurrentHash = "a4382b8dcf2280deb3e2"; // eslint-disable-line no-unused-vars
+/******/ 	var hotCurrentHash = "041d706ce3fd7b5ca2c6"; // eslint-disable-line no-unused-vars
 /******/ 	var hotRequestTimeout = 10000;
 /******/ 	var hotCurrentModuleData = {};
 /******/ 	var hotCurrentChildModule; // eslint-disable-line no-unused-vars
@@ -4112,6 +4112,11 @@ function getConfiguration() {
   return configuration;
 }
 
+/**
+ * Fire cornerstonetoolsmeasurementmodified event on provided element
+ * @param {any} element which freehand data has been modified
+ * @param {any} data the measurment data
+ */
 function fireModeified(element, data) {
   var eventType = _events2.default.MEASUREMENT_MODIFIED;
   var modifiedEventData = {
@@ -21710,15 +21715,23 @@ function dragTextBox(currentHandle) {
 */
 function dragHandle(currentHandle, data) {
   var config = _freehand.freehand.getConfiguration();
+  var handleIndex = -1;
 
   data.handles.invalidHandlePlacement = _freeHandIntersect2.default.modify(data.handles, currentHandle);
   data.active = true;
   data.highlight = true;
   data.handles[currentHandle].x = config.mouseLocation.handles.start.x;
   data.handles[currentHandle].y = config.mouseLocation.handles.start.y;
-  if (currentHandle) {
-    var lastLineIndex = data.handles[currentHandle - 1].lines.length - 1;
-    var lastLine = data.handles[currentHandle - 1].lines[lastLineIndex];
+
+  if (currentHandle === 0) {
+    handleIndex = data.handles.length - 1;
+  } else {
+    handleIndex = currentHandle - 1;
+  }
+
+  if (currentHandle >= 0) {
+    var lastLineIndex = data.handles[handleIndex].lines.length - 1;
+    var lastLine = data.handles[handleIndex].lines[lastLineIndex];
 
     lastLine.x = config.mouseLocation.handles.start.x;
     lastLine.y = config.mouseLocation.handles.start.y;
