@@ -1,4 +1,4 @@
-/*! cornerstone-tools - 2.4.0 - 2019-01-27 | (c) 2017 Chris Hafey | https://github.com/cornerstonejs/cornerstoneTools */
+/*! cornerstone-tools - 2.4.0 - 2019-01-28 | (c) 2017 Chris Hafey | https://github.com/cornerstonejs/cornerstoneTools */
 (function webpackUniversalModuleDefinition(root, factory) {
 	if(typeof exports === 'object' && typeof module === 'object')
 		module.exports = factory();
@@ -73,7 +73,7 @@ return /******/ (function(modules) { // webpackBootstrap
 /******/ 	}
 /******/
 /******/ 	var hotApplyOnUpdate = true;
-/******/ 	var hotCurrentHash = "f7e7b96a3b1307f08136"; // eslint-disable-line no-unused-vars
+/******/ 	var hotCurrentHash = "a5c037c8aad7142948bb"; // eslint-disable-line no-unused-vars
 /******/ 	var hotRequestTimeout = 10000;
 /******/ 	var hotCurrentModuleData = {};
 /******/ 	var hotCurrentChildModule; // eslint-disable-line no-unused-vars
@@ -3258,8 +3258,12 @@ function endDrawing(eventData, handleNearby) {
   }
 
   var config = freehand.getConfiguration();
-
   var data = toolData.data[config.currentTool];
+  var deleteData = false;
+
+  if (!data) {
+    return;
+  }
 
   data.active = false;
   data.highlight = false;
@@ -3267,7 +3271,11 @@ function endDrawing(eventData, handleNearby) {
 
   // Connect the end handle to the origin handle
   if (handleNearby !== undefined) {
-    data.handles[config.currentHandle - 1].lines.push(data.handles[0]);
+    if (data.handles.length > 2) {
+      data.handles[config.currentHandle - 1].lines.push(data.handles[0]);
+    } else {
+      deleteData = true;
+    }
   }
 
   if (config.modifying) {
@@ -3281,18 +3289,22 @@ function endDrawing(eventData, handleNearby) {
   config.activePencilMode = false;
   data.canComplete = false;
 
-  var seriesModule = _externalModules2.default.cornerstone.metaData.get('generalSeriesModule', eventData.image.imageId);
-  var modality = void 0;
+  if (deleteData) {
+    (0, _toolState.removeToolState)(eventData.element, toolType, data);
+  } else {
+    var seriesModule = _externalModules2.default.cornerstone.metaData.get('generalSeriesModule', eventData.image.imageId);
+    var modality = void 0;
 
-  if (seriesModule) {
-    modality = seriesModule.modality;
+    if (seriesModule) {
+      modality = seriesModule.modality;
+    }
+
+    calculateStatistics(data, eventData.element, eventData.image, modality);
+
+    fireModified(eventData.element, data);
   }
 
-  calculateStatistics(data, eventData.element, eventData.image, modality);
-
   _externalModules2.default.cornerstone.updateImage(eventData.element);
-
-  fireModified(eventData.element, data);
 }
 
 /**
@@ -4114,8 +4126,12 @@ function closeToolIfDrawing(element) {
   if (config.currentTool >= 0) {
     // Actively drawing but changed mode.
     var lastHandlePlaced = config.currentHandle;
+    var enabledElement = _externalModules2.default.cornerstone.getEnabledElement(element);
 
-    endDrawing(element, lastHandlePlaced);
+    endDrawing({
+      element: element,
+      image: enabledElement.image
+    }, lastHandlePlaced);
   }
 }
 
