@@ -1,4 +1,4 @@
-/*! cornerstone-tools - 2.4.0 - 2019-01-28 | (c) 2017 Chris Hafey | https://github.com/cornerstonejs/cornerstoneTools */
+/*! cornerstone-tools - 2.4.0 - 2019-02-04 | (c) 2017 Chris Hafey | https://github.com/cornerstonejs/cornerstoneTools */
 (function webpackUniversalModuleDefinition(root, factory) {
 	if(typeof exports === 'object' && typeof module === 'object')
 		module.exports = factory();
@@ -73,7 +73,7 @@ return /******/ (function(modules) { // webpackBootstrap
 /******/ 	}
 /******/
 /******/ 	var hotApplyOnUpdate = true;
-/******/ 	var hotCurrentHash = "a5c037c8aad7142948bb"; // eslint-disable-line no-unused-vars
+/******/ 	var hotCurrentHash = "68314fc6abacd6231284"; // eslint-disable-line no-unused-vars
 /******/ 	var hotRequestTimeout = 10000;
 /******/ 	var hotCurrentModuleData = {};
 /******/ 	var hotCurrentChildModule; // eslint-disable-line no-unused-vars
@@ -2309,6 +2309,10 @@ Object.defineProperty(exports, "__esModule", {
 });
 exports.ellipticalRoiTouch = exports.ellipticalRoi = undefined;
 
+var _events = __webpack_require__(/*! ../events.js */ "./events.js");
+
+var _events2 = _interopRequireDefault(_events);
+
 var _externalModules = __webpack_require__(/*! ../externalModules.js */ "./externalModules.js");
 
 var _externalModules2 = _interopRequireDefault(_externalModules);
@@ -2345,6 +2349,10 @@ var _calculateSUV = __webpack_require__(/*! ../util/calculateSUV.js */ "./util/c
 
 var _calculateSUV2 = _interopRequireDefault(_calculateSUV);
 
+var _triggerEvent = __webpack_require__(/*! ../util/triggerEvent.js */ "./util/triggerEvent.js");
+
+var _triggerEvent2 = _interopRequireDefault(_triggerEvent);
+
 var _drawLinkedTextBox = __webpack_require__(/*! ../util/drawLinkedTextBox.js */ "./util/drawLinkedTextBox.js");
 
 var _drawLinkedTextBox2 = _interopRequireDefault(_drawLinkedTextBox);
@@ -2352,6 +2360,10 @@ var _drawLinkedTextBox2 = _interopRequireDefault(_drawLinkedTextBox);
 var _toolState = __webpack_require__(/*! ../stateManagement/toolState.js */ "./stateManagement/toolState.js");
 
 var _drawing = __webpack_require__(/*! ../util/drawing.js */ "./util/drawing.js");
+
+var _getColRowPixelSpacing = __webpack_require__(/*! ../util/getColRowPixelSpacing.js */ "./util/getColRowPixelSpacing.js");
+
+var _getColRowPixelSpacing2 = _interopRequireDefault(_getColRowPixelSpacing);
 
 function _interopRequireDefault(obj) { return obj && obj.__esModule ? obj : { default: obj }; }
 
@@ -2462,16 +2474,10 @@ function onImageRendered(e) {
   var seriesModule = cornerstone.metaData.get('generalSeriesModule', image.imageId);
   var imagePlane = cornerstone.metaData.get('imagePlaneModule', image.imageId);
   var modality = void 0;
-  var rowPixelSpacing = void 0;
-  var colPixelSpacing = void 0;
 
-  if (imagePlane) {
-    rowPixelSpacing = imagePlane.rowPixelSpacing || imagePlane.rowImagePixelSpacing;
-    colPixelSpacing = imagePlane.columnPixelSpacing || imagePlane.colImagePixelSpacing;
-  } else {
-    rowPixelSpacing = image.rowPixelSpacing;
-    colPixelSpacing = image.columnPixelSpacing;
-  }
+  var _getColRowPixelSpacin = (0, _getColRowPixelSpacing2.default)(eventData.image),
+      rowPixelSpacing = _getColRowPixelSpacin.rowPixelSpacing,
+      colPixelSpacing = _getColRowPixelSpacin.colPixelSpacing;
 
   if (seriesModule) {
     modality = seriesModule.modality;
@@ -2518,71 +2524,7 @@ function onImageRendered(e) {
         (0, _drawHandles2.default)(context, eventData, data.handles, color);
       }
 
-      // Define variables for the area and mean/standard deviation
-      var area = void 0,
-          meanStdDev = void 0,
-          meanStdDevSUV = void 0;
-
-      // Perform a check to see if the tool has been invalidated. This is to prevent
-      // Unnecessary re-calculation of the area, mean, and standard deviation if the
-      // Image is re-rendered but the tool has not moved (e.g. during a zoom)
-      if (data.invalidated === false) {
-        // If the data is not invalidated, retrieve it from the toolData
-        meanStdDev = data.meanStdDev;
-        meanStdDevSUV = data.meanStdDevSUV;
-        area = data.area;
-      } else {
-        // If the data has been invalidated, we need to calculate it again
-
-        // Retrieve the bounds of the ellipse in image coordinates
-        var ellipse = {
-          left: Math.round(Math.min(data.handles.start.x, data.handles.end.x)),
-          top: Math.round(Math.min(data.handles.start.y, data.handles.end.y)),
-          width: Math.round(Math.abs(data.handles.start.x - data.handles.end.x)),
-          height: Math.round(Math.abs(data.handles.start.y - data.handles.end.y))
-        };
-
-        // First, make sure this is not a color image, since no mean / standard
-        // Deviation will be calculated for color images.
-        if (!image.color) {
-          // Retrieve the array of pixels that the ellipse bounds cover
-          var pixels = cornerstone.getPixels(element, ellipse.left, ellipse.top, ellipse.width, ellipse.height);
-
-          // Calculate the mean & standard deviation from the pixels and the ellipse details
-          meanStdDev = (0, _calculateEllipseStatistics2.default)(pixels, ellipse);
-
-          if (modality === 'PT') {
-            // If the image is from a PET scan, use the DICOM tags to
-            // Calculate the SUV from the mean and standard deviation.
-
-            // Note that because we are using modality pixel values from getPixels, and
-            // The calculateSUV routine also rescales to modality pixel values, we are first
-            // Returning the values to storedPixel values before calcuating SUV with them.
-            // TODO: Clean this up? Should we add an option to not scale in calculateSUV?
-            meanStdDevSUV = {
-              mean: (0, _calculateSUV2.default)(image, (meanStdDev.mean - image.intercept) / image.slope),
-              stdDev: (0, _calculateSUV2.default)(image, (meanStdDev.stdDev - image.intercept) / image.slope)
-            };
-          }
-
-          // If the mean and standard deviation values are sane, store them for later retrieval
-          if (meanStdDev && !isNaN(meanStdDev.mean)) {
-            data.meanStdDev = meanStdDev;
-            data.meanStdDevSUV = meanStdDevSUV;
-          }
-        }
-
-        // Calculate the image area from the ellipse dimensions and pixel spacing
-        area = Math.PI * (ellipse.width * (colPixelSpacing || 1) / 2) * (ellipse.height * (rowPixelSpacing || 1) / 2);
-
-        // If the area value is sane, store it for later retrieval
-        if (!isNaN(area)) {
-          data.area = area;
-        }
-
-        // Set the invalidated flag to false so that this data won't automatically be recalculated
-        data.invalidated = false;
-      }
+      calculateStatistics(data, element, image, modality, rowPixelSpacing, colPixelSpacing);
 
       // If the textbox has not been moved by the user, it should be displayed on the right-most
       // Side of the tool.
@@ -2690,19 +2632,124 @@ function onImageRendered(e) {
 }
 // /////// END IMAGE RENDERING ///////
 
+function calculateStatistics(data, element, image, modality, rowPixelSpacing, colPixelSpacing) {
+  var cornerstone = _externalModules2.default.cornerstone;
+  // Define variables for the area and mean/standard deviation
+  var area = void 0,
+      meanStdDev = void 0,
+      meanStdDevSUV = void 0;
+
+  // Perform a check to see if the tool has been invalidated. This is to prevent
+  // Unnecessary re-calculation of the area, mean, and standard deviation if the
+  // Image is re-rendered but the tool has not moved (e.g. during a zoom)
+  if (data.invalidated === false) {
+    // If the data is not invalidated, retrieve it from the toolData
+    meanStdDev = data.meanStdDev;
+    meanStdDevSUV = data.meanStdDevSUV;
+    area = data.area;
+  } else {
+    // If the data has been invalidated, we need to calculate it again
+
+    // Retrieve the bounds of the ellipse in image coordinates
+    var ellipse = {
+      left: Math.round(Math.min(data.handles.start.x, data.handles.end.x)),
+      top: Math.round(Math.min(data.handles.start.y, data.handles.end.y)),
+      width: Math.round(Math.abs(data.handles.start.x - data.handles.end.x)),
+      height: Math.round(Math.abs(data.handles.start.y - data.handles.end.y))
+    };
+
+    // First, make sure this is not a color image, since no mean / standard
+    // Deviation will be calculated for color images.
+    if (!image.color) {
+      // Retrieve the array of pixels that the ellipse bounds cover
+      var pixels = cornerstone.getPixels(element, ellipse.left, ellipse.top, ellipse.width, ellipse.height);
+
+      // Calculate the mean & standard deviation from the pixels and the ellipse details
+      meanStdDev = (0, _calculateEllipseStatistics2.default)(pixels, ellipse);
+
+      if (modality === 'PT') {
+        // If the image is from a PET scan, use the DICOM tags to
+        // Calculate the SUV from the mean and standard deviation.
+
+        // Note that because we are using modality pixel values from getPixels, and
+        // The calculateSUV routine also rescales to modality pixel values, we are first
+        // Returning the values to storedPixel values before calcuating SUV with them.
+        // TODO: Clean this up? Should we add an option to not scale in calculateSUV?
+        meanStdDevSUV = {
+          mean: (0, _calculateSUV2.default)(image, (meanStdDev.mean - image.intercept) / image.slope),
+          stdDev: (0, _calculateSUV2.default)(image, (meanStdDev.stdDev - image.intercept) / image.slope)
+        };
+      }
+
+      // If the mean and standard deviation values are sane, store them for later retrieval
+      if (meanStdDev && !isNaN(meanStdDev.mean)) {
+        data.meanStdDev = meanStdDev;
+        data.meanStdDevSUV = meanStdDevSUV;
+      }
+    }
+
+    // Calculate the image area from the ellipse dimensions and pixel spacing
+    area = Math.PI * (ellipse.width * (colPixelSpacing || 1) / 2) * (ellipse.height * (rowPixelSpacing || 1) / 2);
+
+    // If the area value is sane, store it for later retrieval
+    if (!isNaN(area)) {
+      data.area = area;
+    }
+
+    // Set the invalidated flag to false so that this data won't automatically be recalculated
+    data.invalidated = false;
+  }
+}
+
+function onDrawingCompleted(element, data) {
+  var image = _externalModules2.default.cornerstone.getImage(element);
+  var seriesModule = _externalModules2.default.cornerstone.metaData.get('generalSeriesModule', image.imageId);
+  var modality = void 0;
+
+  var _getColRowPixelSpacin2 = (0, _getColRowPixelSpacing2.default)(image),
+      rowPixelSpacing = _getColRowPixelSpacin2.rowPixelSpacing,
+      colPixelSpacing = _getColRowPixelSpacin2.colPixelSpacing;
+
+  if (seriesModule) {
+    modality = seriesModule.modality;
+  }
+
+  calculateStatistics(data, element, image, modality, rowPixelSpacing, colPixelSpacing);
+
+  fireModified(element, data);
+}
+
+/**
+ * Fire cornerstonetoolsmeasurementmodified event on provided element
+ * @param {any} element which freehand data has been modified
+ * @param {any} data the measurment data
+ */
+function fireModified(element, data) {
+  var eventType = _events2.default.MEASUREMENT_MODIFIED;
+  var modifiedEventData = {
+    toolType: toolType,
+    element: element,
+    measurementData: data
+  };
+
+  (0, _triggerEvent2.default)(element, eventType, modifiedEventData);
+}
+
 // Module exports
 var ellipticalRoi = (0, _mouseButtonTool2.default)({
   createNewMeasurement: createNewMeasurement,
   onImageRendered: onImageRendered,
   pointNearTool: pointNearTool,
-  toolType: toolType
+  toolType: toolType,
+  onDrawingCompleted: onDrawingCompleted
 });
 
 var ellipticalRoiTouch = (0, _touchTool2.default)({
   createNewMeasurement: createNewMeasurement,
   onImageRendered: onImageRendered,
   pointNearTool: pointNearToolTouch,
-  toolType: toolType
+  toolType: toolType,
+  onDrawingCompleted: onDrawingCompleted
 });
 
 exports.ellipticalRoi = ellipticalRoi;
@@ -2947,6 +2994,10 @@ var _toolState = __webpack_require__(/*! ../stateManagement/toolState.js */ "./s
 var _toolOptions = __webpack_require__(/*! ../toolOptions.js */ "./toolOptions.js");
 
 var _clip = __webpack_require__(/*! ../util/clip.js */ "./util/clip.js");
+
+var _getColRowPixelSpacing = __webpack_require__(/*! ../util/getColRowPixelSpacing.js */ "./util/getColRowPixelSpacing.js");
+
+var _getColRowPixelSpacing2 = _interopRequireDefault(_getColRowPixelSpacing);
 
 var _keysHeld = __webpack_require__(/*! ../util/freehand/keysHeld.js */ "./util/freehand/keysHeld.js");
 
@@ -3299,7 +3350,11 @@ function endDrawing(eventData, handleNearby) {
       modality = seriesModule.modality;
     }
 
-    calculateStatistics(data, eventData.element, eventData.image, modality);
+    var _getColRowPixelSpacin = (0, _getColRowPixelSpacing2.default)(eventData.image),
+        rowPixelSpacing = _getColRowPixelSpacin.rowPixelSpacing,
+        colPixelSpacing = _getColRowPixelSpacin.colPixelSpacing;
+
+    calculateStatistics(data, eventData.element, eventData.image, modality, rowPixelSpacing, colPixelSpacing);
 
     fireModified(eventData.element, data);
   }
@@ -3770,6 +3825,10 @@ function onImageRendered(e) {
   var seriesModule = cornerstone.metaData.get('generalSeriesModule', image.imageId);
   var modality = void 0;
 
+  var _getColRowPixelSpacin2 = (0, _getColRowPixelSpacing2.default)(image),
+      rowPixelSpacing = _getColRowPixelSpacin2.rowPixelSpacing,
+      colPixelSpacing = _getColRowPixelSpacin2.colPixelSpacing;
+
   if (seriesModule) {
     modality = seriesModule.modality;
   }
@@ -3841,7 +3900,7 @@ function onImageRendered(e) {
       }
 
       // Define variables for the area and mean/standard deviation
-      calculateStatistics(data, element, image, modality);
+      calculateStatistics(data, element, image, modality, rowPixelSpacing, colPixelSpacing);
 
       // Only render text if polygon ROI has been completed and freehand 'shiftKey' mode was not used:
       if (data.polyBoundingBox && !data.textBox.freehand) {
@@ -3909,7 +3968,7 @@ function onImageRendered(e) {
       // This uses Char code 178 for a superscript 2
       var suffix = ' mm' + String.fromCharCode(178);
 
-      if (!image.rowPixelSpacing || !image.columnPixelSpacing) {
+      if (!rowPixelSpacing || !colPixelSpacing) {
         suffix = ' pixels' + String.fromCharCode(178);
       }
 
@@ -3928,7 +3987,7 @@ function onImageRendered(e) {
   }
 }
 
-function calculateStatistics(data, element, image, modality) {
+function calculateStatistics(data, element, image, modality, rowPixelSpacing, columnPixelSpacing) {
   var cornerstone = _externalModules2.default.cornerstone;
 
   // Define variables for the area and mean/standard deviation
@@ -4005,9 +4064,7 @@ function calculateStatistics(data, element, image, modality) {
 
     // Retrieve the pixel spacing values, and if they are not
     // Real non-zero values, set them to 1
-    var columnPixelSpacing = image.columnPixelSpacing || 1;
-    var rowPixelSpacing = image.rowPixelSpacing || 1;
-    var scaling = columnPixelSpacing * rowPixelSpacing;
+    var scaling = (columnPixelSpacing || 1) * (rowPixelSpacing || 1);
 
     area = (0, _freeHandArea2.default)(data.handles, scaling);
 
@@ -4938,6 +4995,10 @@ Object.defineProperty(exports, "__esModule", {
 });
 exports.lengthTouch = exports.length = undefined;
 
+var _events = __webpack_require__(/*! ../events.js */ "./events.js");
+
+var _events2 = _interopRequireDefault(_events);
+
 var _externalModules = __webpack_require__(/*! ../externalModules.js */ "./externalModules.js");
 
 var _externalModules2 = _interopRequireDefault(_externalModules);
@@ -4949,6 +5010,10 @@ var _mouseButtonTool2 = _interopRequireDefault(_mouseButtonTool);
 var _touchTool = __webpack_require__(/*! ./touchTool.js */ "./imageTools/touchTool.js");
 
 var _touchTool2 = _interopRequireDefault(_touchTool);
+
+var _triggerEvent = __webpack_require__(/*! ../util/triggerEvent.js */ "./util/triggerEvent.js");
+
+var _triggerEvent2 = _interopRequireDefault(_triggerEvent);
 
 var _drawLinkedTextBox = __webpack_require__(/*! ../util/drawLinkedTextBox.js */ "./util/drawLinkedTextBox.js");
 
@@ -5021,6 +5086,49 @@ function pointNearTool(element, data, coords) {
   return (0, _lineSegDistance2.default)(element, data.handles.start, data.handles.end, coords) < 25;
 }
 
+function onDrawingCompleted(element, data) {
+  var image = _externalModules2.default.cornerstone.getImage(element);
+
+  var _getColRowPixlelSpaci = getColRowPixlelSpacing(image),
+      rowPixelSpacing = _getColRowPixlelSpaci.rowPixelSpacing,
+      colPixelSpacing = _getColRowPixlelSpaci.colPixelSpacing;
+
+  calculateLength(data, rowPixelSpacing, colPixelSpacing);
+
+  fireModified(element, data);
+}
+
+/**
+ * Fire cornerstonetoolsmeasurementmodified event on provided element
+ * @param {any} element which freehand data has been modified
+ * @param {any} data the measurment data
+ */
+function fireModified(element, data) {
+  var eventType = _events2.default.MEASUREMENT_MODIFIED;
+  var modifiedEventData = {
+    toolType: toolType,
+    element: element,
+    measurementData: data
+  };
+
+  (0, _triggerEvent2.default)(element, eventType, modifiedEventData);
+}
+
+function getColRowPixlelSpacing(image) {
+  var imagePlane = _externalModules2.default.cornerstone.metaData.get('imagePlaneModule', image.imageId);
+  var rowPixelSpacing = void 0;
+  var colPixelSpacing = void 0;
+
+  if (imagePlane) {
+    rowPixelSpacing = imagePlane.rowPixelSpacing || imagePlane.rowImagePixelSpacing;
+    colPixelSpacing = imagePlane.columnPixelSpacing || imagePlane.colImagePixelSpacing;
+  } else {
+    rowPixelSpacing = image.rowPixelSpacing;
+    colPixelSpacing = image.columnPixelSpacing;
+  }
+
+  return { rowPixelSpacing: rowPixelSpacing, colPixelSpacing: colPixelSpacing };
+}
 // /////// BEGIN IMAGE RENDERING ///////
 function onImageRendered(e) {
   var eventData = e.detail;
@@ -5042,16 +5150,10 @@ function onImageRendered(e) {
   var lineWidth = _toolStyle2.default.getToolWidth();
   var config = length.getConfiguration();
   var imagePlane = cornerstone.metaData.get('imagePlaneModule', image.imageId);
-  var rowPixelSpacing = void 0;
-  var colPixelSpacing = void 0;
 
-  if (imagePlane) {
-    rowPixelSpacing = imagePlane.rowPixelSpacing || imagePlane.rowImagePixelSpacing;
-    colPixelSpacing = imagePlane.columnPixelSpacing || imagePlane.colImagePixelSpacing;
-  } else {
-    rowPixelSpacing = image.rowPixelSpacing;
-    colPixelSpacing = image.columnPixelSpacing;
-  }
+  var _getColRowPixlelSpaci2 = getColRowPixlelSpacing(image),
+      rowPixelSpacing = _getColRowPixlelSpaci2.rowPixelSpacing,
+      colPixelSpacing = _getColRowPixlelSpaci2.colPixelSpacing;
 
   var _loop = function _loop(i) {
     var data = toolData.data[i];
@@ -5076,15 +5178,7 @@ function onImageRendered(e) {
 
       (0, _drawHandles2.default)(context, eventData, data.handles, color, handleOptions);
 
-      // Set rowPixelSpacing and columnPixelSpacing to 1 if they are undefined (or zero)
-      var dx = (data.handles.end.x - data.handles.start.x) * (colPixelSpacing || 1);
-      var dy = (data.handles.end.y - data.handles.start.y) * (rowPixelSpacing || 1);
-
-      // Calculate the length, and create the text variable with the millimeters or pixels suffix
-      var length = Math.sqrt(dx * dx + dy * dy);
-
-      // Store the length inside the tool for outside access
-      data.length = length;
+      calculateLength(data, rowPixelSpacing, colPixelSpacing);
 
       if (!data.handles.textBox.hasMoved) {
         var coords = {
@@ -5139,6 +5233,18 @@ function onImageRendered(e) {
     return [handles.start, midpoint, handles.end];
   }
 }
+
+function calculateLength(data, rowPixelSpacing, colPixelSpacing) {
+  // Set rowPixelSpacing and columnPixelSpacing to 1 if they are undefined (or zero)
+  var dx = (data.handles.end.x - data.handles.start.x) * (colPixelSpacing || 1);
+  var dy = (data.handles.end.y - data.handles.start.y) * (rowPixelSpacing || 1);
+
+  // Calculate the length, and create the text variable with the millimeters or pixels suffix
+  var length = Math.sqrt(dx * dx + dy * dy);
+
+  // Store the length inside the tool for outside access
+  data.length = length;
+}
 // /////// END IMAGE RENDERING ///////
 
 // Module exports
@@ -5146,14 +5252,16 @@ var length = (0, _mouseButtonTool2.default)({
   createNewMeasurement: createNewMeasurement,
   onImageRendered: onImageRendered,
   pointNearTool: pointNearTool,
-  toolType: toolType
+  toolType: toolType,
+  onDrawingCompleted: onDrawingCompleted
 });
 
 var lengthTouch = (0, _touchTool2.default)({
   createNewMeasurement: createNewMeasurement,
   onImageRendered: onImageRendered,
   pointNearTool: pointNearTool,
-  toolType: toolType
+  toolType: toolType,
+  onDrawingCompleted: onDrawingCompleted
 });
 
 exports.length = length;
@@ -5871,6 +5979,8 @@ exports.default = function (mouseToolInterface) {
       if ((0, _anyHandlesOutsideImage2.default)(eventData, data.handles)) {
         // Delete the measurement
         (0, _toolState.removeToolState)(element, toolType, data);
+      } else if (mouseToolInterface.onDrawingCompleted) {
+        mouseToolInterface.onDrawingCompleted(element, data);
       }
 
       _externalModules2.default.cornerstone.updateImage(element);
@@ -5995,6 +6105,8 @@ exports.default = function (mouseToolInterface) {
       if ((0, _anyHandlesOutsideImage2.default)(mouseEventData, measurementData.handles)) {
         // Delete the measurement
         (0, _toolState.removeToolState)(element, toolType, measurementData);
+      } else if (mouseToolInterface.onDrawingCompleted) {
+        mouseToolInterface.onDrawingCompleted(element, measurementData);
       }
 
       element.addEventListener(_events2.default.MOUSE_MOVE, mouseMove);
@@ -6795,6 +6907,10 @@ Object.defineProperty(exports, "__esModule", {
 });
 exports.rectangleRoiTouch = exports.rectangleRoi = undefined;
 
+var _events = __webpack_require__(/*! ../events.js */ "./events.js");
+
+var _events2 = _interopRequireDefault(_events);
+
 var _externalModules = __webpack_require__(/*! ../externalModules.js */ "./externalModules.js");
 
 var _externalModules2 = _interopRequireDefault(_externalModules);
@@ -6823,6 +6939,10 @@ var _calculateSUV = __webpack_require__(/*! ../util/calculateSUV.js */ "./util/c
 
 var _calculateSUV2 = _interopRequireDefault(_calculateSUV);
 
+var _triggerEvent = __webpack_require__(/*! ../util/triggerEvent.js */ "./util/triggerEvent.js");
+
+var _triggerEvent2 = _interopRequireDefault(_triggerEvent);
+
 var _toolState = __webpack_require__(/*! ../stateManagement/toolState.js */ "./stateManagement/toolState.js");
 
 var _drawLinkedTextBox = __webpack_require__(/*! ../util/drawLinkedTextBox.js */ "./util/drawLinkedTextBox.js");
@@ -6830,6 +6950,10 @@ var _drawLinkedTextBox = __webpack_require__(/*! ../util/drawLinkedTextBox.js */
 var _drawLinkedTextBox2 = _interopRequireDefault(_drawLinkedTextBox);
 
 var _drawing = __webpack_require__(/*! ../util/drawing.js */ "./util/drawing.js");
+
+var _getColRowPixelSpacing = __webpack_require__(/*! ../util/getColRowPixelSpacing.js */ "./util/getColRowPixelSpacing.js");
+
+var _getColRowPixelSpacing2 = _interopRequireDefault(_getColRowPixelSpacing);
 
 function _interopRequireDefault(obj) { return obj && obj.__esModule ? obj : { default: obj }; }
 
@@ -6958,16 +7082,10 @@ function onImageRendered(e) {
   var seriesModule = cornerstone.metaData.get('generalSeriesModule', image.imageId);
   var imagePlane = cornerstone.metaData.get('imagePlaneModule', image.imageId);
   var modality = void 0;
-  var rowPixelSpacing = void 0;
-  var colPixelSpacing = void 0;
 
-  if (imagePlane) {
-    rowPixelSpacing = imagePlane.rowPixelSpacing || imagePlane.rowImagePixelSpacing;
-    colPixelSpacing = imagePlane.columnPixelSpacing || imagePlane.colImagePixelSpacing;
-  } else {
-    rowPixelSpacing = image.rowPixelSpacing;
-    colPixelSpacing = image.columnPixelSpacing;
-  }
+  var _getColRowPixelSpacin = (0, _getColRowPixelSpacing2.default)(eventData.image),
+      rowPixelSpacing = _getColRowPixelSpacin.rowPixelSpacing,
+      colPixelSpacing = _getColRowPixelSpacin.colPixelSpacing;
 
   if (seriesModule) {
     modality = seriesModule.modality;
@@ -7014,71 +7132,7 @@ function onImageRendered(e) {
         (0, _drawHandles2.default)(context, eventData, data.handles, color);
       }
 
-      // Define variables for the area and mean/standard deviation
-      var area = void 0,
-          meanStdDev = void 0,
-          meanStdDevSUV = void 0;
-
-      // Perform a check to see if the tool has been invalidated. This is to prevent
-      // Unnecessary re-calculation of the area, mean, and standard deviation if the
-      // Image is re-rendered but the tool has not moved (e.g. during a zoom)
-      if (data.invalidated === false) {
-        // If the data is not invalidated, retrieve it from the toolData
-        meanStdDev = data.meanStdDev;
-        meanStdDevSUV = data.meanStdDevSUV;
-        area = data.area;
-      } else {
-        // If the data has been invalidated, we need to calculate it again
-
-        // Retrieve the bounds of the ellipse in image coordinates
-        var ellipse = {
-          left: Math.min(data.handles.start.x, data.handles.end.x),
-          top: Math.min(data.handles.start.y, data.handles.end.y),
-          width: Math.abs(data.handles.start.x - data.handles.end.x),
-          height: Math.abs(data.handles.start.y - data.handles.end.y)
-        };
-
-        // First, make sure this is not a color image, since no mean / standard
-        // Deviation will be calculated for color images.
-        if (!image.color) {
-          // Retrieve the array of pixels that the ellipse bounds cover
-          var pixels = cornerstone.getPixels(element, ellipse.left, ellipse.top, ellipse.width, ellipse.height);
-
-          // Calculate the mean & standard deviation from the pixels and the ellipse details
-          meanStdDev = calculateMeanStdDev(pixels, ellipse);
-
-          if (modality === 'PT') {
-            // If the image is from a PET scan, use the DICOM tags to
-            // Calculate the SUV from the mean and standard deviation.
-
-            // Note that because we are using modality pixel values from getPixels, and
-            // The calculateSUV routine also rescales to modality pixel values, we are first
-            // Returning the values to storedPixel values before calcuating SUV with them.
-            // TODO: Clean this up? Should we add an option to not scale in calculateSUV?
-            meanStdDevSUV = {
-              mean: (0, _calculateSUV2.default)(image, (meanStdDev.mean - image.intercept) / image.slope),
-              stdDev: (0, _calculateSUV2.default)(image, (meanStdDev.stdDev - image.intercept) / image.slope)
-            };
-          }
-
-          // If the mean and standard deviation values are sane, store them for later retrieval
-          if (meanStdDev && !isNaN(meanStdDev.mean)) {
-            data.meanStdDev = meanStdDev;
-            data.meanStdDevSUV = meanStdDevSUV;
-          }
-        }
-
-        // Calculate the image area from the ellipse dimensions and pixel spacing
-        area = ellipse.width * (colPixelSpacing || 1) * (ellipse.height * (rowPixelSpacing || 1));
-
-        // If the area value is sane, store it for later retrieval
-        if (!isNaN(area)) {
-          data.area = area;
-        }
-
-        // Set the invalidated flag to false so that this data won't automatically be recalculated
-        data.invalidated = false;
-      }
+      calculateStatistics(data, element, image, modality, rowPixelSpacing, colPixelSpacing);
 
       var text = textBoxText(data);
 
@@ -7185,19 +7239,125 @@ function onImageRendered(e) {
 }
 // /////// END IMAGE RENDERING ///////
 
+function onDrawingCompleted(element, data) {
+  var image = _externalModules2.default.cornerstone.getImage(element);
+  var seriesModule = _externalModules2.default.cornerstone.metaData.get('generalSeriesModule', image.imageId);
+  var modality = void 0;
+
+  var _getColRowPixelSpacin2 = (0, _getColRowPixelSpacing2.default)(image),
+      rowPixelSpacing = _getColRowPixelSpacin2.rowPixelSpacing,
+      colPixelSpacing = _getColRowPixelSpacin2.colPixelSpacing;
+
+  if (seriesModule) {
+    modality = seriesModule.modality;
+  }
+
+  calculateStatistics(data, element, image, modality, rowPixelSpacing, colPixelSpacing);
+
+  fireModified(element, data);
+}
+
+function calculateStatistics(data, element, image, modality, rowPixelSpacing, colPixelSpacing) {
+  var cornerstone = _externalModules2.default.cornerstone;
+
+  // Define variables for the area and mean/standard deviation
+  var area = void 0,
+      meanStdDev = void 0,
+      meanStdDevSUV = void 0;
+
+  // Perform a check to see if the tool has been invalidated. This is to prevent
+  // Unnecessary re-calculation of the area, mean, and standard deviation if the
+  // Image is re-rendered but the tool has not moved (e.g. during a zoom)
+  if (data.invalidated === false) {
+    // If the data is not invalidated, retrieve it from the toolData
+    meanStdDev = data.meanStdDev;
+    meanStdDevSUV = data.meanStdDevSUV;
+    area = data.area;
+  } else {
+    // If the data has been invalidated, we need to calculate it again
+
+    // Retrieve the bounds of the ellipse in image coordinates
+    var ellipse = {
+      left: Math.min(data.handles.start.x, data.handles.end.x),
+      top: Math.min(data.handles.start.y, data.handles.end.y),
+      width: Math.abs(data.handles.start.x - data.handles.end.x),
+      height: Math.abs(data.handles.start.y - data.handles.end.y)
+    };
+
+    // First, make sure this is not a color image, since no mean / standard
+    // Deviation will be calculated for color images.
+    if (!image.color) {
+      // Retrieve the array of pixels that the ellipse bounds cover
+      var pixels = cornerstone.getPixels(element, ellipse.left, ellipse.top, ellipse.width, ellipse.height);
+
+      // Calculate the mean & standard deviation from the pixels and the ellipse details
+      meanStdDev = calculateMeanStdDev(pixels, ellipse);
+
+      if (modality === 'PT') {
+        // If the image is from a PET scan, use the DICOM tags to
+        // Calculate the SUV from the mean and standard deviation.
+
+        // Note that because we are using modality pixel values from getPixels, and
+        // The calculateSUV routine also rescales to modality pixel values, we are first
+        // Returning the values to storedPixel values before calcuating SUV with them.
+        // TODO: Clean this up? Should we add an option to not scale in calculateSUV?
+        meanStdDevSUV = {
+          mean: (0, _calculateSUV2.default)(image, (meanStdDev.mean - image.intercept) / image.slope),
+          stdDev: (0, _calculateSUV2.default)(image, (meanStdDev.stdDev - image.intercept) / image.slope)
+        };
+      }
+
+      // If the mean and standard deviation values are sane, store them for later retrieval
+      if (meanStdDev && !isNaN(meanStdDev.mean)) {
+        data.meanStdDev = meanStdDev;
+        data.meanStdDevSUV = meanStdDevSUV;
+      }
+    }
+
+    // Calculate the image area from the ellipse dimensions and pixel spacing
+    area = ellipse.width * (colPixelSpacing || 1) * (ellipse.height * (rowPixelSpacing || 1));
+
+    // If the area value is sane, store it for later retrieval
+    if (!isNaN(area)) {
+      data.area = area;
+    }
+
+    // Set the invalidated flag to false so that this data won't automatically be recalculated
+    data.invalidated = false;
+  }
+}
+
+/**
+ * Fire cornerstonetoolsmeasurementmodified event on provided element
+ * @param {any} element which freehand data has been modified
+ * @param {any} data the measurment data
+ */
+function fireModified(element, data) {
+  var eventType = _events2.default.MEASUREMENT_MODIFIED;
+  var modifiedEventData = {
+    toolType: toolType,
+    element: element,
+    measurementData: data
+  };
+
+  (0, _triggerEvent2.default)(element, eventType, modifiedEventData);
+}
+
 // Module exports
 var rectangleRoi = (0, _mouseButtonTool2.default)({
   createNewMeasurement: createNewMeasurement,
   onImageRendered: onImageRendered,
   pointNearTool: pointNearTool,
-  toolType: toolType
+  toolType: toolType,
+  onDrawingCompleted: onDrawingCompleted
 });
 
 var rectangleRoiTouch = (0, _touchTool2.default)({
   createNewMeasurement: createNewMeasurement,
   onImageRendered: onImageRendered,
   pointNearTool: pointNearTool,
-  toolType: toolType
+  toolType: toolType,
+  onDrawingCompleted: onDrawingCompleted
 });
 
 exports.rectangleRoi = rectangleRoi;
@@ -9304,6 +9464,8 @@ function touchTool(touchToolInterface) {
       if ((0, _anyHandlesOutsideImage2.default)(touchEventData, measurementData.handles)) {
         // Delete the measurement
         (0, _toolState.removeToolState)(element, touchToolInterface.toolType, measurementData);
+      } else if (touchToolInterface.onDrawingCompleted) {
+        touchToolInterface.onDrawingCompleted(element, measurementData);
       }
 
       cornerstone.updateImage(element);
@@ -9322,6 +9484,8 @@ function touchTool(touchToolInterface) {
       if ((0, _anyHandlesOutsideImage2.default)(touchEventData, measurementData.handles)) {
         // Delete the measurement
         (0, _toolState.removeToolState)(element, touchToolInterface.toolType, measurementData);
+      } else if (touchToolInterface.onDrawingCompleted) {
+        touchToolInterface.onDrawingCompleted(element, measurementData);
       }
 
       element.addEventListener(_events2.default.TOUCH_START_ACTIVE, touchToolInterface.touchDownActivateCallback || touchDownActivateCallback);
@@ -9367,6 +9531,8 @@ function touchTool(touchToolInterface) {
       if ((0, _anyHandlesOutsideImage2.default)(eventData, data.handles)) {
         // Delete the measurement
         (0, _toolState.removeToolState)(element, touchToolInterface.toolType, data);
+      } else if (touchToolInterface.onDrawingCompleted) {
+        touchToolInterface.onDrawingCompleted(element, data);
       }
 
       cornerstone.updateImage(element);
@@ -9443,6 +9609,8 @@ function touchTool(touchToolInterface) {
       if ((0, _anyHandlesOutsideImage2.default)(eventData, data.handles)) {
         // Delete the measurement
         (0, _toolState.removeToolState)(eventData.element, touchToolInterface.toolType, data);
+      } else if (touchToolInterface.onDrawingCompleted) {
+        touchToolInterface.onDrawingCompleted(element, data);
       }
 
       cornerstone.updateImage(eventData.element);
@@ -22531,6 +22699,44 @@ function rayFromPointCrosssesLine(point, handleI, handleJ) {
 
   return false;
 }
+
+/***/ }),
+
+/***/ "./util/getColRowPixelSpacing.js":
+/*!***************************************!*\
+  !*** ./util/getColRowPixelSpacing.js ***!
+  \***************************************/
+/*! no static exports found */
+/***/ (function(module, exports, __webpack_require__) {
+
+"use strict";
+
+
+Object.defineProperty(exports, "__esModule", {
+    value: true
+});
+
+exports.default = function (image) {
+    var imagePlane = _externalModules2.default.cornerstone.metaData.get('imagePlaneModule', image.imageId);
+    var rowPixelSpacing = void 0;
+    var colPixelSpacing = void 0;
+
+    if (imagePlane) {
+        rowPixelSpacing = imagePlane.rowPixelSpacing || imagePlane.rowImagePixelSpacing;
+        colPixelSpacing = imagePlane.columnPixelSpacing || imagePlane.colImagePixelSpacing;
+    } else {
+        rowPixelSpacing = image.rowPixelSpacing;
+        colPixelSpacing = image.columnPixelSpacing;
+    }
+
+    return { rowPixelSpacing: rowPixelSpacing, colPixelSpacing: colPixelSpacing };
+};
+
+var _externalModules = __webpack_require__(/*! ../externalModules.js */ "./externalModules.js");
+
+var _externalModules2 = _interopRequireDefault(_externalModules);
+
+function _interopRequireDefault(obj) { return obj && obj.__esModule ? obj : { default: obj }; }
 
 /***/ }),
 

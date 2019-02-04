@@ -93,8 +93,10 @@ export default function (mouseToolInterface) {
       if (anyHandlesOutsideImage(eventData, data.handles)) {
         // Delete the measurement
         removeToolState(element, toolType, data);
+      } else if(mouseToolInterface.onDrawingCompleted) {
+        mouseToolInterface.onDrawingCompleted (element, data);
       }
-
+      
       external.cornerstone.updateImage(element);
       element.addEventListener(EVENTS.MOUSE_MOVE, mouseMove);
     }
@@ -217,6 +219,8 @@ export default function (mouseToolInterface) {
       if (anyHandlesOutsideImage(mouseEventData, measurementData.handles)) {
         // Delete the measurement
         removeToolState(element, toolType, measurementData);
+      } else if(mouseToolInterface.onDrawingCompleted) {
+        mouseToolInterface.onDrawingCompleted (element, measurementData);
       }
 
       element.addEventListener(EVENTS.MOUSE_MOVE, mouseMove);

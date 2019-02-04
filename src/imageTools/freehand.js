@@ -12,6 +12,7 @@ import drawLinkedTextBox from '../util/drawLinkedTextBox.js';
 import { addToolState, getToolState, removeToolState } from '../stateManagement/toolState.js';
 import { setToolOptions, getToolOptions } from '../toolOptions.js';
 import { clipToBox } from '../util/clip.js';
+import getColRowPixelSpacing from '../util/getColRowPixelSpacing.js';
 
 // Freehand tool libraries
 import { keyDownCallback, keyUpCallback } from '../util/freehand/keysHeld.js';
@@ -338,7 +339,9 @@ function endDrawing (eventData, handleNearby) {
       modality = seriesModule.modality;
     }
 
-    calculateStatistics(data, eventData.element, eventData.image, modality);
+    let { rowPixelSpacing, colPixelSpacing} = getColRowPixelSpacing(eventData.image);
+
+    calculateStatistics(data, eventData.element, eventData.image, modality, rowPixelSpacing, colPixelSpacing);
 
     fireModified(eventData.element, data);
   }
@@ -811,6 +814,7 @@ function onImageRendered (e) {
   const config = freehand.getConfiguration();
   const seriesModule = cornerstone.metaData.get('generalSeriesModule', image.imageId);
   let modality;
+  let { rowPixelSpacing, colPixelSpacing} = getColRowPixelSpacing(image);
 
   if (seriesModule) {
     modality = seriesModule.modality;
@@ -884,7 +888,7 @@ function onImageRendered (e) {
       }
 
       // Define variables for the area and mean/standard deviation
-      calculateStatistics(data, element, image, modality);
+      calculateStatistics(data, element, image, modality, rowPixelSpacing, colPixelSpacing);
       
       // Only render text if polygon ROI has been completed and freehand 'shiftKey' mode was not used:
       if (data.polyBoundingBox && !data.textBox.freehand) {
@@ -944,7 +948,7 @@ function onImageRendered (e) {
       // This uses Char code 178 for a superscript 2
       let suffix = ` mm${String.fromCharCode(178)}`;
 
-      if (!image.rowPixelSpacing || !image.columnPixelSpacing) {
+      if (!rowPixelSpacing || !colPixelSpacing) {
         suffix = ` pixels${String.fromCharCode(178)}`;
       }
 
@@ -964,7 +968,7 @@ function onImageRendered (e) {
 }
 
 
-function calculateStatistics(data, element, image, modality){
+function calculateStatistics(data, element, image, modality, rowPixelSpacing, columnPixelSpacing){
   const cornerstone = external.cornerstone;
 
   // Define variables for the area and mean/standard deviation
@@ -1041,9 +1045,7 @@ function calculateStatistics(data, element, image, modality){
 
     // Retrieve the pixel spacing values, and if they are not
     // Real non-zero values, set them to 1
-    const columnPixelSpacing = image.columnPixelSpacing || 1;
-    const rowPixelSpacing = image.rowPixelSpacing || 1;
-    const scaling = columnPixelSpacing * rowPixelSpacing;
+    const scaling = (columnPixelSpacing || 1) * (rowPixelSpacing || 1);
 
     area = freeHandArea(data.handles, scaling);
 
