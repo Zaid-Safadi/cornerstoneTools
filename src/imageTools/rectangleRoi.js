@@ -283,7 +283,7 @@ function onImageRendered (e) {
 }
 // /////// END IMAGE RENDERING ///////
 
-function onDrawingCompleted ( element, data) {
+function onHandleDoneMove ( element, data) {
   const image = external.cornerstone.getImage(element);
   const seriesModule = external.cornerstone.metaData.get('generalSeriesModule', image.imageId);
   let modality;
@@ -295,7 +295,7 @@ function onDrawingCompleted ( element, data) {
 
   calculateStatistics (data, element, image, modality, rowPixelSpacing, colPixelSpacing )
 
-  fireModified(element, data);
+  fireCompleted(element, data);
 }
 
 function calculateStatistics (data, element, image, modality, rowPixelSpacing, colPixelSpacing) {
@@ -373,15 +373,15 @@ function calculateStatistics (data, element, image, modality, rowPixelSpacing, c
  * @param {any} element which freehand data has been modified
  * @param {any} data the measurment data
  */
-function fireModified (element, data) {
-  const eventType = EVENTS.MEASUREMENT_MODIFIED;
-  const modifiedEventData = {
+function fireCompleted (element, data) {
+  const eventType = EVENTS.MEASUREMENT_COMPLETED;
+  const completedEventData = {
     toolType,
     element,
     measurementData: data
   };
 
-  triggerEvent(element, eventType, modifiedEventData);
+  triggerEvent(element, eventType, completedEventData);
 }
 
 // Module exports
@@ -390,7 +390,7 @@ const rectangleRoi = mouseButtonTool({
   onImageRendered,
   pointNearTool,
   toolType,
-  onDrawingCompleted
+  onHandleDoneMove
 });
 
 const rectangleRoiTouch = touchTool({
@@ -398,7 +398,7 @@ const rectangleRoiTouch = touchTool({
   onImageRendered,
   pointNearTool,
   toolType,
-  onDrawingCompleted
+  onHandleDoneMove
 });
 
 export {

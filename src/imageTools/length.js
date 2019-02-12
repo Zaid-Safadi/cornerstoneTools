@@ -56,13 +56,13 @@ function pointNearTool (element, data, coords) {
   return lineSegDistance(element, data.handles.start, data.handles.end, coords) < 25;
 }
 
-function onDrawingCompleted (element, data) {
+function onHandleDoneMove (element, data) {
   const image = external.cornerstone.getImage(element);
   let {rowPixelSpacing, colPixelSpacing} = getColRowPixlelSpacing(image);
 
   calculateLength(data, rowPixelSpacing, colPixelSpacing);  
 
-  fireModified (element, data);
+  fireCompleted (element, data);
 }
 
 /**
@@ -70,15 +70,15 @@ function onDrawingCompleted (element, data) {
  * @param {any} element which freehand data has been modified
  * @param {any} data the measurment data
  */
-function fireModified (element, data) {
-  const eventType = EVENTS.MEASUREMENT_MODIFIED;
-  const modifiedEventData = {
+function fireCompleted (element, data) {
+  const eventType = EVENTS.MEASUREMENT_COMPLETED;
+  const completedEventData = {
     toolType,
     element,
     measurementData: data
   };
 
-  triggerEvent(element, eventType, modifiedEventData);
+  triggerEvent(element, eventType, completedEventData);
 }
 
 function getColRowPixlelSpacing(image) {
@@ -210,7 +210,7 @@ const length = mouseButtonTool({
   onImageRendered,
   pointNearTool,
   toolType,
-  onDrawingCompleted
+  onHandleDoneMove
 });
 
 const lengthTouch = touchTool({
@@ -218,7 +218,7 @@ const lengthTouch = touchTool({
   onImageRendered,
   pointNearTool,
   toolType,
-  onDrawingCompleted
+  onHandleDoneMove
 });
 
 export {

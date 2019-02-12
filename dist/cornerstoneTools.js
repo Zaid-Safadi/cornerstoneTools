@@ -1,4 +1,4 @@
-/*! cornerstone-tools - 2.4.0 - 2019-02-04 | (c) 2017 Chris Hafey | https://github.com/cornerstonejs/cornerstoneTools */
+/*! cornerstone-tools - 2.4.0 - 2019-02-12 | (c) 2017 Chris Hafey | https://github.com/cornerstonejs/cornerstoneTools */
 (function webpackUniversalModuleDefinition(root, factory) {
 	if(typeof exports === 'object' && typeof module === 'object')
 		module.exports = factory();
@@ -73,7 +73,7 @@ return /******/ (function(modules) { // webpackBootstrap
 /******/ 	}
 /******/
 /******/ 	var hotApplyOnUpdate = true;
-/******/ 	var hotCurrentHash = "68314fc6abacd6231284"; // eslint-disable-line no-unused-vars
+/******/ 	var hotCurrentHash = "1f8596efa045ab9314b5"; // eslint-disable-line no-unused-vars
 /******/ 	var hotRequestTimeout = 10000;
 /******/ 	var hotCurrentModuleData = {};
 /******/ 	var hotCurrentChildModule; // eslint-disable-line no-unused-vars
@@ -825,6 +825,7 @@ var EVENTS = {
   MEASUREMENT_ADDED: 'cornerstonetoolsmeasurementadded',
   MEASUREMENT_MODIFIED: 'cornerstonetoolsmeasurementmodified',
   MEASUREMENT_REMOVED: 'cornerstonemeasurementremoved',
+  MEASUREMENT_COMPLETED: 'cornerstonemeasurementcompleted',
   TOOL_DEACTIVATED: 'cornerstonetoolstooldeactivated',
   CLIP_STOPPED: 'cornerstonetoolsclipstopped',
   STACK_SCROLL: 'cornerstonestackscroll', // Should be renamed
@@ -891,6 +892,10 @@ Object.defineProperty(exports, "__esModule", {
 });
 exports.angleTouch = exports.angle = undefined;
 
+var _events = __webpack_require__(/*! ../events.js */ "./events.js");
+
+var _events2 = _interopRequireDefault(_events);
+
 var _externalModules = __webpack_require__(/*! ../externalModules.js */ "./externalModules.js");
 
 var _externalModules2 = _interopRequireDefault(_externalModules);
@@ -926,6 +931,14 @@ var _lineSegDistance = __webpack_require__(/*! ../util/lineSegDistance.js */ "./
 var _lineSegDistance2 = _interopRequireDefault(_lineSegDistance);
 
 var _drawing = __webpack_require__(/*! ../util/drawing.js */ "./util/drawing.js");
+
+var _triggerEvent = __webpack_require__(/*! ../util/triggerEvent.js */ "./util/triggerEvent.js");
+
+var _triggerEvent2 = _interopRequireDefault(_triggerEvent);
+
+var _getColRowPixelSpacing = __webpack_require__(/*! ../util/getColRowPixelSpacing.js */ "./util/getColRowPixelSpacing.js");
+
+var _getColRowPixelSpacing2 = _interopRequireDefault(_getColRowPixelSpacing);
 
 function _interopRequireDefault(obj) { return obj && obj.__esModule ? obj : { default: obj }; }
 
@@ -1014,20 +1027,9 @@ function onImageRendered(e) {
       // Draw the handles
       (0, _drawHandles2.default)(context, eventData, data.handles);
 
-      // Need to work on correct angle to measure.  This is a cobb angle and we need to determine
-      // Where lines cross to measure angle. For now it will show smallest angle.
-      var columnPixelSpacing = eventData.image.columnPixelSpacing || 1;
-      var rowPixelSpacing = eventData.image.rowPixelSpacing || 1;
-      var dx1 = (Math.ceil(data.handles.start.x) - Math.ceil(data.handles.end.x)) * columnPixelSpacing;
-      var dy1 = (Math.ceil(data.handles.start.y) - Math.ceil(data.handles.end.y)) * rowPixelSpacing;
-      var dx2 = (Math.ceil(data.handles.start2.x) - Math.ceil(data.handles.end2.x)) * columnPixelSpacing;
-      var dy2 = (Math.ceil(data.handles.start2.y) - Math.ceil(data.handles.end2.y)) * rowPixelSpacing;
+      calcualteAngle(data, eventData.image);
 
-      var angle = Math.acos(Math.abs((dx1 * dx2 + dy1 * dy2) / (Math.sqrt(dx1 * dx1 + dy1 * dy1) * Math.sqrt(dx2 * dx2 + dy2 * dy2))));
-
-      angle *= 180 / Math.PI;
-
-      var rAngle = (0, _roundToDecimal2.default)(angle, 2);
+      var rAngle = data.rAngle;
       var str = '00B0'; // Degrees symbol
       var text = rAngle.toString() + String.fromCharCode(parseInt(str, 16));
 
@@ -1049,19 +1051,64 @@ function onImageRendered(e) {
 }
 // /////// END IMAGE RENDERING ///////
 
+function calcualteAngle(data, image) {
+  // Need to work on correct angle to measure.  This is a cobb angle and we need to determine
+  // Where lines cross to measure angle. For now it will show smallest angle.
+  var _getColRowPixelSpacin = (0, _getColRowPixelSpacing2.default)(image),
+      rowPixelSpacing = _getColRowPixelSpacin.rowPixelSpacing,
+      colPixelSpacing = _getColRowPixelSpacin.colPixelSpacing;
+
+  var dx1 = (Math.ceil(data.handles.start.x) - Math.ceil(data.handles.end.x)) * colPixelSpacing;
+  var dy1 = (Math.ceil(data.handles.start.y) - Math.ceil(data.handles.end.y)) * rowPixelSpacing;
+  var dx2 = (Math.ceil(data.handles.start2.x) - Math.ceil(data.handles.end2.x)) * colPixelSpacing;
+  var dy2 = (Math.ceil(data.handles.start2.y) - Math.ceil(data.handles.end2.y)) * rowPixelSpacing;
+
+  var angle = Math.acos(Math.abs((dx1 * dx2 + dy1 * dy2) / (Math.sqrt(dx1 * dx1 + dy1 * dy1) * Math.sqrt(dx2 * dx2 + dy2 * dy2))));
+
+  angle *= 180 / Math.PI;
+
+  data.rAngle = (0, _roundToDecimal2.default)(data.angle, 2);
+}
+
+function onHandleDoneMove(element, data) {
+  var image = _externalModules2.default.cornerstone.getImage(element);
+
+  calcualteAngle(data, image);
+
+  fireCompleted(element, data);
+}
+
+/**
+ * Fire cornerstonetoolsmeasurementcompleted event on provided element
+ * @param {any} element which freehand data has been completed
+ * @param {any} data the measurment data
+ */
+function fireCompleted(element, data) {
+  var eventType = _events2.default.MEASUREMENT_COMPLETED;
+  var completedEventData = {
+    toolType: toolType,
+    element: element,
+    measurementData: data
+  };
+
+  (0, _triggerEvent2.default)(element, eventType, completedEventData);
+}
+
 // Module exports
 var angle = (0, _mouseButtonTool2.default)({
   createNewMeasurement: createNewMeasurement,
   onImageRendered: onImageRendered,
   pointNearTool: pointNearTool,
-  toolType: toolType
+  toolType: toolType,
+  onHandleDoneMove: onHandleDoneMove
 });
 
 var angleTouch = (0, _touchTool2.default)({
   createNewMeasurement: createNewMeasurement,
   onImageRendered: onImageRendered,
   pointNearTool: pointNearTool,
-  toolType: toolType
+  toolType: toolType,
+  onHandleDoneMove: onHandleDoneMove
 });
 
 exports.angle = angle;
@@ -1231,12 +1278,14 @@ function addNewMeasurement(mouseEventData) {
     if ((0, _anyHandlesOutsideImage2.default)(mouseEventData, measurementData.handles)) {
       // Delete the measurement
       (0, _toolState.removeToolState)(element, toolType, measurementData);
-    }
+    } else {
+      var config = arrowAnnotate.getConfiguration();
 
-    var config = arrowAnnotate.getConfiguration();
+      if (measurementData.text === undefined) {
+        config.getTextCallback(doneChangingTextCallback);
+      }
 
-    if (measurementData.text === undefined) {
-      config.getTextCallback(doneChangingTextCallback);
+      onHandleDoneMove(element, measurementData);
     }
 
     cornerstone.updateImage(element);
@@ -1441,18 +1490,20 @@ function addNewMeasurementTouch(touchEventData) {
   cornerstone.updateImage(element);
 
   (0, _moveNewHandleTouch2.default)(touchEventData, toolType, measurementData, measurementData.handles.end, function () {
-    cornerstone.updateImage(element);
-
     if ((0, _anyHandlesOutsideImage2.default)(touchEventData, measurementData.handles)) {
       // Delete the measurement
       (0, _toolState.removeToolState)(element, toolType, measurementData);
+    } else {
+      var config = arrowAnnotate.getConfiguration();
+
+      if (measurementData.text === undefined) {
+        config.getTextCallback(doneChangingTextCallback);
+      }
+
+      onHandleDoneMove(element, measurementData);
     }
 
-    var config = arrowAnnotate.getConfiguration();
-
-    if (measurementData.text === undefined) {
-      config.getTextCallback(doneChangingTextCallback);
-    }
+    cornerstone.updateImage(element);
   });
 }
 
@@ -1571,13 +1622,34 @@ function pressCallback(e) {
   e.stopPropagation();
 }
 
+function onHandleDoneMove(element, data) {
+  fireCompleted(element, data);
+}
+
+/**
+ * Fire cornerstonetoolsmeasurementcompleted event on provided element
+ * @param {any} element which freehand data has been completed
+ * @param {any} data the measurment data
+ */
+function fireCompleted(element, data) {
+  var eventType = _events2.default.MEASUREMENT_COMPLETED;
+  var completedEventData = {
+    toolType: toolType,
+    element: element,
+    measurementData: data
+  };
+
+  (0, _triggerEvent2.default)(element, eventType, completedEventData);
+}
+
 var arrowAnnotate = (0, _mouseButtonTool2.default)({
   addNewMeasurement: addNewMeasurement,
   createNewMeasurement: createNewMeasurement,
   onImageRendered: onImageRendered,
   pointNearTool: pointNearTool,
   toolType: toolType,
-  mouseDoubleClickCallback: doubleClickCallback
+  mouseDoubleClickCallback: doubleClickCallback,
+  onHandleDoneMove: onHandleDoneMove
 });
 
 arrowAnnotate.setConfiguration(configuration);
@@ -1588,7 +1660,8 @@ var arrowAnnotateTouch = (0, _touchTool2.default)({
   onImageRendered: onImageRendered,
   pointNearTool: pointNearTool,
   toolType: toolType,
-  pressCallback: pressCallback
+  pressCallback: pressCallback,
+  onHandleDoneMove: onHandleDoneMove
 });
 
 exports.arrowAnnotate = arrowAnnotate;
@@ -2701,7 +2774,7 @@ function calculateStatistics(data, element, image, modality, rowPixelSpacing, co
   }
 }
 
-function onDrawingCompleted(element, data) {
+function onHandleDoneMove(element, data) {
   var image = _externalModules2.default.cornerstone.getImage(element);
   var seriesModule = _externalModules2.default.cornerstone.metaData.get('generalSeriesModule', image.imageId);
   var modality = void 0;
@@ -2716,7 +2789,7 @@ function onDrawingCompleted(element, data) {
 
   calculateStatistics(data, element, image, modality, rowPixelSpacing, colPixelSpacing);
 
-  fireModified(element, data);
+  fireCompleted(element, data);
 }
 
 /**
@@ -2724,15 +2797,15 @@ function onDrawingCompleted(element, data) {
  * @param {any} element which freehand data has been modified
  * @param {any} data the measurment data
  */
-function fireModified(element, data) {
-  var eventType = _events2.default.MEASUREMENT_MODIFIED;
-  var modifiedEventData = {
+function fireCompleted(element, data) {
+  var eventType = _events2.default.MEASUREMENT_COMPLETED;
+  var completedEventData = {
     toolType: toolType,
     element: element,
     measurementData: data
   };
 
-  (0, _triggerEvent2.default)(element, eventType, modifiedEventData);
+  (0, _triggerEvent2.default)(element, eventType, completedEventData);
 }
 
 // Module exports
@@ -2741,7 +2814,7 @@ var ellipticalRoi = (0, _mouseButtonTool2.default)({
   onImageRendered: onImageRendered,
   pointNearTool: pointNearTool,
   toolType: toolType,
-  onDrawingCompleted: onDrawingCompleted
+  onHandleDoneMove: onHandleDoneMove
 });
 
 var ellipticalRoiTouch = (0, _touchTool2.default)({
@@ -2749,7 +2822,7 @@ var ellipticalRoiTouch = (0, _touchTool2.default)({
   onImageRendered: onImageRendered,
   pointNearTool: pointNearToolTouch,
   toolType: toolType,
-  onDrawingCompleted: onDrawingCompleted
+  onHandleDoneMove: onHandleDoneMove
 });
 
 exports.ellipticalRoi = ellipticalRoi;
@@ -3356,7 +3429,7 @@ function endDrawing(eventData, handleNearby) {
 
     calculateStatistics(data, eventData.element, eventData.image, modality, rowPixelSpacing, colPixelSpacing);
 
-    fireModified(eventData.element, data);
+    fireCompleted(eventData.element, data);
   }
 
   _externalModules2.default.cornerstone.updateImage(eventData.element);
@@ -4215,6 +4288,22 @@ function fireModified(element, data) {
   };
 
   (0, _triggerEvent2.default)(element, eventType, modifiedEventData);
+}
+
+/**
+ * Fire cornerstonetoolsmeasurementcompleted event on provided element
+ * @param {any} element which freehand data has been modified
+ * @param {any} data the measurment data
+ */
+function fireCompleted(element, data) {
+  var eventType = _events2.default.MEASUREMENT_COMPLETED;
+  var completedEventData = {
+    toolType: toolType,
+    element: element,
+    measurementData: data
+  };
+
+  (0, _triggerEvent2.default)(element, eventType, completedEventData);
 }
 
 /**
@@ -5086,7 +5175,7 @@ function pointNearTool(element, data, coords) {
   return (0, _lineSegDistance2.default)(element, data.handles.start, data.handles.end, coords) < 25;
 }
 
-function onDrawingCompleted(element, data) {
+function onHandleDoneMove(element, data) {
   var image = _externalModules2.default.cornerstone.getImage(element);
 
   var _getColRowPixlelSpaci = getColRowPixlelSpacing(image),
@@ -5095,7 +5184,7 @@ function onDrawingCompleted(element, data) {
 
   calculateLength(data, rowPixelSpacing, colPixelSpacing);
 
-  fireModified(element, data);
+  fireCompleted(element, data);
 }
 
 /**
@@ -5103,15 +5192,15 @@ function onDrawingCompleted(element, data) {
  * @param {any} element which freehand data has been modified
  * @param {any} data the measurment data
  */
-function fireModified(element, data) {
-  var eventType = _events2.default.MEASUREMENT_MODIFIED;
-  var modifiedEventData = {
+function fireCompleted(element, data) {
+  var eventType = _events2.default.MEASUREMENT_COMPLETED;
+  var completedEventData = {
     toolType: toolType,
     element: element,
     measurementData: data
   };
 
-  (0, _triggerEvent2.default)(element, eventType, modifiedEventData);
+  (0, _triggerEvent2.default)(element, eventType, completedEventData);
 }
 
 function getColRowPixlelSpacing(image) {
@@ -5253,7 +5342,7 @@ var length = (0, _mouseButtonTool2.default)({
   onImageRendered: onImageRendered,
   pointNearTool: pointNearTool,
   toolType: toolType,
-  onDrawingCompleted: onDrawingCompleted
+  onHandleDoneMove: onHandleDoneMove
 });
 
 var lengthTouch = (0, _touchTool2.default)({
@@ -5261,7 +5350,7 @@ var lengthTouch = (0, _touchTool2.default)({
   onImageRendered: onImageRendered,
   pointNearTool: pointNearTool,
   toolType: toolType,
-  onDrawingCompleted: onDrawingCompleted
+  onHandleDoneMove: onHandleDoneMove
 });
 
 exports.length = length;
@@ -5979,8 +6068,8 @@ exports.default = function (mouseToolInterface) {
       if ((0, _anyHandlesOutsideImage2.default)(eventData, data.handles)) {
         // Delete the measurement
         (0, _toolState.removeToolState)(element, toolType, data);
-      } else if (mouseToolInterface.onDrawingCompleted) {
-        mouseToolInterface.onDrawingCompleted(element, data);
+      } else if (mouseToolInterface.onHandleDoneMove) {
+        mouseToolInterface.onHandleDoneMove(element, data);
       }
 
       _externalModules2.default.cornerstone.updateImage(element);
@@ -6105,8 +6194,8 @@ exports.default = function (mouseToolInterface) {
       if ((0, _anyHandlesOutsideImage2.default)(mouseEventData, measurementData.handles)) {
         // Delete the measurement
         (0, _toolState.removeToolState)(element, toolType, measurementData);
-      } else if (mouseToolInterface.onDrawingCompleted) {
-        mouseToolInterface.onDrawingCompleted(element, measurementData);
+      } else if (mouseToolInterface.onHandleDoneMove) {
+        mouseToolInterface.onHandleDoneMove(element, measurementData);
       }
 
       element.addEventListener(_events2.default.MOUSE_MOVE, mouseMove);
@@ -7239,7 +7328,7 @@ function onImageRendered(e) {
 }
 // /////// END IMAGE RENDERING ///////
 
-function onDrawingCompleted(element, data) {
+function onHandleDoneMove(element, data) {
   var image = _externalModules2.default.cornerstone.getImage(element);
   var seriesModule = _externalModules2.default.cornerstone.metaData.get('generalSeriesModule', image.imageId);
   var modality = void 0;
@@ -7254,7 +7343,7 @@ function onDrawingCompleted(element, data) {
 
   calculateStatistics(data, element, image, modality, rowPixelSpacing, colPixelSpacing);
 
-  fireModified(element, data);
+  fireCompleted(element, data);
 }
 
 function calculateStatistics(data, element, image, modality, rowPixelSpacing, colPixelSpacing) {
@@ -7332,15 +7421,15 @@ function calculateStatistics(data, element, image, modality, rowPixelSpacing, co
  * @param {any} element which freehand data has been modified
  * @param {any} data the measurment data
  */
-function fireModified(element, data) {
-  var eventType = _events2.default.MEASUREMENT_MODIFIED;
-  var modifiedEventData = {
+function fireCompleted(element, data) {
+  var eventType = _events2.default.MEASUREMENT_COMPLETED;
+  var completedEventData = {
     toolType: toolType,
     element: element,
     measurementData: data
   };
 
-  (0, _triggerEvent2.default)(element, eventType, modifiedEventData);
+  (0, _triggerEvent2.default)(element, eventType, completedEventData);
 }
 
 // Module exports
@@ -7349,7 +7438,7 @@ var rectangleRoi = (0, _mouseButtonTool2.default)({
   onImageRendered: onImageRendered,
   pointNearTool: pointNearTool,
   toolType: toolType,
-  onDrawingCompleted: onDrawingCompleted
+  onHandleDoneMove: onHandleDoneMove
 });
 
 var rectangleRoiTouch = (0, _touchTool2.default)({
@@ -7357,7 +7446,7 @@ var rectangleRoiTouch = (0, _touchTool2.default)({
   onImageRendered: onImageRendered,
   pointNearTool: pointNearTool,
   toolType: toolType,
-  onDrawingCompleted: onDrawingCompleted
+  onHandleDoneMove: onHandleDoneMove
 });
 
 exports.rectangleRoi = rectangleRoi;
@@ -8444,6 +8533,14 @@ var _drawing = __webpack_require__(/*! ../util/drawing.js */ "./util/drawing.js"
 
 var _drawTextBox = __webpack_require__(/*! ../util/drawTextBox.js */ "./util/drawTextBox.js");
 
+var _triggerEvent = __webpack_require__(/*! ../util/triggerEvent.js */ "./util/triggerEvent.js");
+
+var _triggerEvent2 = _interopRequireDefault(_triggerEvent);
+
+var _getColRowPixelSpacing = __webpack_require__(/*! ../util/getColRowPixelSpacing.js */ "./util/getColRowPixelSpacing.js");
+
+var _getColRowPixelSpacing2 = _interopRequireDefault(_getColRowPixelSpacing);
+
 function _interopRequireDefault(obj) { return obj && obj.__esModule ? obj : { default: obj }; }
 
 var toolType = 'simpleAngle';
@@ -8545,35 +8642,7 @@ function onImageRendered(e) {
 
       (0, _drawHandles2.default)(context, eventData, data.handles, color, handleOptions);
 
-      // Default to isotropic pixel size, update suffix to reflect this
-      var columnPixelSpacing = eventData.image.columnPixelSpacing || 1;
-      var rowPixelSpacing = eventData.image.rowPixelSpacing || 1;
-
-      var sideA = {
-        x: (Math.ceil(data.handles.middle.x) - Math.ceil(data.handles.start.x)) * columnPixelSpacing,
-        y: (Math.ceil(data.handles.middle.y) - Math.ceil(data.handles.start.y)) * rowPixelSpacing
-      };
-
-      var sideB = {
-        x: (Math.ceil(data.handles.end.x) - Math.ceil(data.handles.middle.x)) * columnPixelSpacing,
-        y: (Math.ceil(data.handles.end.y) - Math.ceil(data.handles.middle.y)) * rowPixelSpacing
-      };
-
-      var sideC = {
-        x: (Math.ceil(data.handles.end.x) - Math.ceil(data.handles.start.x)) * columnPixelSpacing,
-        y: (Math.ceil(data.handles.end.y) - Math.ceil(data.handles.start.y)) * rowPixelSpacing
-      };
-
-      var sideALength = length(sideA);
-      var sideBLength = length(sideB);
-      var sideCLength = length(sideC);
-
-      // Cosine law
-      var angle = Math.acos((Math.pow(sideALength, 2) + Math.pow(sideBLength, 2) - Math.pow(sideCLength, 2)) / (2 * sideALength * sideBLength));
-
-      angle *= 180 / Math.PI;
-
-      data.rAngle = (0, _roundToDecimal2.default)(angle, 2);
+      calcualteAngle(data, eventData.image);
 
       if (data.rAngle) {
         var text = textBoxText(data, eventData.image.rowPixelSpacing, eventData.image.columnPixelSpacing);
@@ -8671,6 +8740,8 @@ function addNewMeasurement(mouseEventData) {
       if ((0, _anyHandlesOutsideImage2.default)(mouseEventData, measurementData.handles)) {
         // Delete the measurement
         (0, _toolState.removeToolState)(element, toolType, measurementData);
+      } else {
+        onHandleDoneMove(element, measurementData);
       }
 
       element.addEventListener(_events2.default.MOUSE_MOVE, simpleAngle.mouseMoveCallback);
@@ -8716,6 +8787,8 @@ function addNewMeasurementTouch(touchEventData) {
         // Delete the measurement
         (0, _toolState.removeToolState)(element, toolType, measurementData);
         cornerstone.updateImage(element);
+      } else {
+        onHandleDoneMove(element, measurementData);
       }
 
       element.addEventListener(_events2.default.TOUCH_DRAG, simpleAngleTouch.touchMoveCallback);
@@ -8726,12 +8799,69 @@ function addNewMeasurementTouch(touchEventData) {
   });
 }
 
+function onHandleDoneMove(element, data) {
+  var image = _externalModules2.default.cornerstone.getImage(element);
+
+  calcualteAngle(data, image);
+
+  fireCompleted(element, data);
+}
+
+function calcualteAngle(data, image) {
+  // Default to isotropic pixel size, update suffix to reflect this
+  var columnPixelSpacing = image.columnPixelSpacing || 1;
+  var rowPixelSpacing = image.rowPixelSpacing || 1;
+
+  var sideA = {
+    x: (Math.ceil(data.handles.middle.x) - Math.ceil(data.handles.start.x)) * columnPixelSpacing,
+    y: (Math.ceil(data.handles.middle.y) - Math.ceil(data.handles.start.y)) * rowPixelSpacing
+  };
+
+  var sideB = {
+    x: (Math.ceil(data.handles.end.x) - Math.ceil(data.handles.middle.x)) * columnPixelSpacing,
+    y: (Math.ceil(data.handles.end.y) - Math.ceil(data.handles.middle.y)) * rowPixelSpacing
+  };
+
+  var sideC = {
+    x: (Math.ceil(data.handles.end.x) - Math.ceil(data.handles.start.x)) * columnPixelSpacing,
+    y: (Math.ceil(data.handles.end.y) - Math.ceil(data.handles.start.y)) * rowPixelSpacing
+  };
+
+  var sideALength = length(sideA);
+  var sideBLength = length(sideB);
+  var sideCLength = length(sideC);
+
+  // Cosine law
+  var angle = Math.acos((Math.pow(sideALength, 2) + Math.pow(sideBLength, 2) - Math.pow(sideCLength, 2)) / (2 * sideALength * sideBLength));
+
+  angle *= 180 / Math.PI;
+
+  data.rAngle = (0, _roundToDecimal2.default)(angle, 2);
+}
+
+/**
+ * Fire cornerstonetoolsmeasurementcompleted event on provided element
+ * @param {any} element which freehand data has been completed
+ * @param {any} data the measurment data
+ */
+function fireCompleted(element, data) {
+  var eventType = _events2.default.MEASUREMENT_COMPLETED;
+  var completedEventData = {
+    toolType: toolType,
+    element: element,
+    measurementData: data
+  };
+
+  (0, _triggerEvent2.default)(element, eventType, completedEventData);
+}
+
 var simpleAngle = (0, _mouseButtonTool2.default)({
   createNewMeasurement: createNewMeasurement,
   addNewMeasurement: addNewMeasurement,
   onImageRendered: onImageRendered,
   pointNearTool: pointNearTool,
-  toolType: toolType
+  toolType: toolType,
+  onHandleDoneMove: onHandleDoneMove
 });
 
 var simpleAngleTouch = (0, _touchTool2.default)({
@@ -8739,7 +8869,8 @@ var simpleAngleTouch = (0, _touchTool2.default)({
   addNewMeasurement: addNewMeasurementTouch,
   onImageRendered: onImageRendered,
   pointNearTool: pointNearTool,
-  toolType: toolType
+  toolType: toolType,
+  onHandleDoneMove: onHandleDoneMove
 });
 
 exports.simpleAngle = simpleAngle;
@@ -9464,8 +9595,8 @@ function touchTool(touchToolInterface) {
       if ((0, _anyHandlesOutsideImage2.default)(touchEventData, measurementData.handles)) {
         // Delete the measurement
         (0, _toolState.removeToolState)(element, touchToolInterface.toolType, measurementData);
-      } else if (touchToolInterface.onDrawingCompleted) {
-        touchToolInterface.onDrawingCompleted(element, measurementData);
+      } else if (touchToolInterface.onHandleDoneMove) {
+        touchToolInterface.onHandleDoneMove(element, measurementData);
       }
 
       cornerstone.updateImage(element);
@@ -9484,8 +9615,8 @@ function touchTool(touchToolInterface) {
       if ((0, _anyHandlesOutsideImage2.default)(touchEventData, measurementData.handles)) {
         // Delete the measurement
         (0, _toolState.removeToolState)(element, touchToolInterface.toolType, measurementData);
-      } else if (touchToolInterface.onDrawingCompleted) {
-        touchToolInterface.onDrawingCompleted(element, measurementData);
+      } else if (touchToolInterface.onHandleDoneMove) {
+        touchToolInterface.onHandleDoneMove(element, measurementData);
       }
 
       element.addEventListener(_events2.default.TOUCH_START_ACTIVE, touchToolInterface.touchDownActivateCallback || touchDownActivateCallback);
@@ -9531,8 +9662,8 @@ function touchTool(touchToolInterface) {
       if ((0, _anyHandlesOutsideImage2.default)(eventData, data.handles)) {
         // Delete the measurement
         (0, _toolState.removeToolState)(element, touchToolInterface.toolType, data);
-      } else if (touchToolInterface.onDrawingCompleted) {
-        touchToolInterface.onDrawingCompleted(element, data);
+      } else if (touchToolInterface.onHandleDoneMove) {
+        touchToolInterface.onHandleDoneMove(element, data);
       }
 
       cornerstone.updateImage(element);
@@ -9609,8 +9740,8 @@ function touchTool(touchToolInterface) {
       if ((0, _anyHandlesOutsideImage2.default)(eventData, data.handles)) {
         // Delete the measurement
         (0, _toolState.removeToolState)(eventData.element, touchToolInterface.toolType, data);
-      } else if (touchToolInterface.onDrawingCompleted) {
-        touchToolInterface.onDrawingCompleted(element, data);
+      } else if (touchToolInterface.onHandleDoneMove) {
+        touchToolInterface.onHandleDoneMove(element, data);
       }
 
       cornerstone.updateImage(eventData.element);

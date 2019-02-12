@@ -14,6 +14,8 @@ import lineSegDistance from '../util/lineSegDistance.js';
 import { addToolState, removeToolState, getToolState } from '../stateManagement/toolState.js';
 import { getNewContext, draw, setShadow, drawJoinedLines } from '../util/drawing.js';
 import { textBoxWidth } from '../util/drawTextBox.js';
+import triggerEvent from '../util/triggerEvent.js';
+import getColRowPixelSpacing from '../util/getColRowPixelSpacing.js';
 
 
 const toolType = 'simpleAngle';
@@ -116,35 +118,7 @@ function onImageRendered (e) {
 
       drawHandles(context, eventData, data.handles, color, handleOptions);
 
-      // Default to isotropic pixel size, update suffix to reflect this
-      const columnPixelSpacing = eventData.image.columnPixelSpacing || 1;
-      const rowPixelSpacing = eventData.image.rowPixelSpacing || 1;
-
-      const sideA = {
-        x: (Math.ceil(data.handles.middle.x) - Math.ceil(data.handles.start.x)) * columnPixelSpacing,
-        y: (Math.ceil(data.handles.middle.y) - Math.ceil(data.handles.start.y)) * rowPixelSpacing
-      };
-
-      const sideB = {
-        x: (Math.ceil(data.handles.end.x) - Math.ceil(data.handles.middle.x)) * columnPixelSpacing,
-        y: (Math.ceil(data.handles.end.y) - Math.ceil(data.handles.middle.y)) * rowPixelSpacing
-      };
-
-      const sideC = {
-        x: (Math.ceil(data.handles.end.x) - Math.ceil(data.handles.start.x)) * columnPixelSpacing,
-        y: (Math.ceil(data.handles.end.y) - Math.ceil(data.handles.start.y)) * rowPixelSpacing
-      };
-
-      const sideALength = length(sideA);
-      const sideBLength = length(sideB);
-      const sideCLength = length(sideC);
-
-      // Cosine law
-      let angle = Math.acos((Math.pow(sideALength, 2) + Math.pow(sideBLength, 2) - Math.pow(sideCLength, 2)) / (2 * sideALength * sideBLength));
-
-      angle *= (180 / Math.PI);
-
-      data.rAngle = roundToDecimal(angle, 2);
+      calcualteAngle(data, eventData.image);
 
       if (data.rAngle) {
         const text = textBoxText(data, eventData.image.rowPixelSpacing, eventData.image.columnPixelSpacing);
@@ -237,6 +211,8 @@ function addNewMeasurement (mouseEventData) {
       if (anyHandlesOutsideImage(mouseEventData, measurementData.handles)) {
         // Delete the measurement
         removeToolState(element, toolType, measurementData);
+      } else {
+        onHandleDoneMove(element, measurementData);
       }
 
       element.addEventListener(EVENTS.MOUSE_MOVE, simpleAngle.mouseMoveCallback);
@@ -282,6 +258,8 @@ function addNewMeasurementTouch (touchEventData) {
         // Delete the measurement
         removeToolState(element, toolType, measurementData);
         cornerstone.updateImage(element);
+      } else {
+        onHandleDoneMove(element, measurementData);
       }
 
       element.addEventListener(EVENTS.TOUCH_DRAG, simpleAngleTouch.touchMoveCallback);
@@ -292,12 +270,71 @@ function addNewMeasurementTouch (touchEventData) {
   });
 }
 
+
+function onHandleDoneMove (element, data) {
+  const image = external.cornerstone.getImage(element);
+  
+  calcualteAngle (data, image )
+
+  fireCompleted(element, data);
+}
+
+function calcualteAngle (data, image){
+  // Default to isotropic pixel size, update suffix to reflect this
+  const columnPixelSpacing = image.columnPixelSpacing || 1;
+  const rowPixelSpacing = image.rowPixelSpacing || 1;
+
+  const sideA = {
+    x: (Math.ceil(data.handles.middle.x) - Math.ceil(data.handles.start.x)) * columnPixelSpacing,
+    y: (Math.ceil(data.handles.middle.y) - Math.ceil(data.handles.start.y)) * rowPixelSpacing
+  };
+
+  const sideB = {
+    x: (Math.ceil(data.handles.end.x) - Math.ceil(data.handles.middle.x)) * columnPixelSpacing,
+    y: (Math.ceil(data.handles.end.y) - Math.ceil(data.handles.middle.y)) * rowPixelSpacing
+  };
+
+  const sideC = {
+    x: (Math.ceil(data.handles.end.x) - Math.ceil(data.handles.start.x)) * columnPixelSpacing,
+    y: (Math.ceil(data.handles.end.y) - Math.ceil(data.handles.start.y)) * rowPixelSpacing
+  };
+
+  const sideALength = length(sideA);
+  const sideBLength = length(sideB);
+  const sideCLength = length(sideC);
+
+  // Cosine law
+  let angle = Math.acos((Math.pow(sideALength, 2) + Math.pow(sideBLength, 2) - Math.pow(sideCLength, 2)) / (2 * sideALength * sideBLength));
+
+  angle *= (180 / Math.PI);
+
+  data.rAngle = roundToDecimal(angle, 2);
+
+}
+
+/**
+ * Fire cornerstonetoolsmeasurementcompleted event on provided element
+ * @param {any} element which freehand data has been completed
+ * @param {any} data the measurment data
+ */
+function fireCompleted (element, data) {
+  const eventType = EVENTS.MEASUREMENT_COMPLETED;
+  const completedEventData = {
+    toolType,
+    element,
+    measurementData: data
+  };
+
+  triggerEvent(element, eventType, completedEventData);
+}
+
 const simpleAngle = mouseButtonTool({
   createNewMeasurement,
   addNewMeasurement,
   onImageRendered,
   pointNearTool,
-  toolType
+  toolType,
+  onHandleDoneMove
 });
 
 const simpleAngleTouch = touchTool({
@@ -305,7 +342,8 @@ const simpleAngleTouch = touchTool({
   addNewMeasurement: addNewMeasurementTouch,
   onImageRendered,
   pointNearTool,
-  toolType
+  toolType,
+  onHandleDoneMove
 });
 
 export {

@@ -343,7 +343,7 @@ function endDrawing (eventData, handleNearby) {
 
     calculateStatistics(data, eventData.element, eventData.image, modality, rowPixelSpacing, colPixelSpacing);
 
-    fireModified(eventData.element, data);
+    fireCompleted(eventData.element, data);
   }
 
   external.cornerstone.updateImage(eventData.element);
@@ -1196,6 +1196,22 @@ function fireModified (element, data) {
   };
 
   triggerEvent(element, eventType, modifiedEventData);
+}
+
+/**
+ * Fire cornerstonetoolsmeasurementcompleted event on provided element
+ * @param {any} element which freehand data has been modified
+ * @param {any} data the measurment data
+ */
+function fireCompleted (element, data) {
+  const eventType = EVENTS.MEASUREMENT_COMPLETED;
+  const completedEventData = {
+    toolType,
+    element,
+    measurementData: data
+  };
+
+  triggerEvent(element, eventType, completedEventData);
 }
 
 /**
